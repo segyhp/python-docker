@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  web:
+    build:
+      context: .
+    ports:
+      - 5000:5000
+    volumes:
+      - ./:/app
+    links:
+      - influxdb
+    environment:
+      - INFLUX_HOST=influxdb
+      - INFLUX_PORT=8086
+
+  mysqldb:
+    image: mysql
+    restart: always
+    ports:
+      - 3308:3306
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+    volumes:
+      - mysql:/var/lib/mysql
+      - mysql_config:/etc/mysql
+
+  influxdb:
+    image: influxdb:1.8
+    volumes:
+      # Mount for influxdb data directory
+      # Use ./ to match the root folder of docker volume
+      - ./influxdb:/var/lib/influxdb
+    ports:
+      # The API for InfluxDB is served on port 8086
+      - "8086:8086"
+      - "8082:8082"
+
+  chronograf:
+    image: chronograf:latest
+    volumes:
+      # Mount for chronograf database
+      - ./chronograf:/var/lib/chronograf/
+    ports:
+      # The WebUI for Chronograf is served on port 8888
+      - "8888:8888"
+    depends_on:
+      - influxdb
+
+  dashboard:
+    image: grafana/grafana
+    links:
+      - web
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana:/var/lib/grafana
+
+volumes:
+  mysql:
+  mysql_config:
+  grafana:
+  influxdb:
+  chronograf:

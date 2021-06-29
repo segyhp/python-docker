@@ -6,6 +6,13 @@ WORKDIR /app
 
 COPY requirements.txt .
 
+# Install tools for debugging (using vi/vim/nano)
+RUN apt update && apt install -y \
+    vim \
+    iputils-ping \
+    && rm -rf /var/lib/apt/lists/*
+
+
 RUN pip3 install -r requirements.txt
 
 COPY . .

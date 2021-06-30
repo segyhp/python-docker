@@ -1,0 +1,104 @@
+version: "3.8"
+networks:
+  main:
+    driver: ${NETWORKS_DRIVER}
+  cross-app:
+    external: true
+
+volumes:
+  ulms:
+    driver: ${VOLUMES_DRIVER}
+  influxdb:
+    driver: ${VOLUMES_DRIVER}
+  influxdb_config:
+    driver: ${VOLUMES_DRIVER}
+  zookeeper_data:
+    driver: ${VOLUMES_DRIVER}
+  kafka_data:
+    driver: ${VOLUMES_DRIVER}
+  chronograf_data:
+    driver: ${VOLUMES_DRIVER}
+
+services:
+  ulms:
+    build:
+      context: .
+    ports:
+      - "${PORT}:5000"
+    volumes:
+      - ./:/ulms-service
+    environment:
+      #environment will be unnecessary in here because it is fetched from .env and handled by python ( by dot env) or flask
+      - INFLUX_HOST=${INFLUX_HOST}
+#      - INFLUX_PORT=${INFLUX_PORT}
+#      - KAFKA_HOST=${KAFKA_HOST}
+    networks:
+      - main
+      - cross-app
+
+  influxdb:
+    image: influxdb:${INFLUX_VERSION}
+    ports:
+      - "${INFLUX_PORT}:8086"
+    volumes:
+      # Mount for influxdb data directory
+      - influxdb:/var/lib/influxdb
+#       Mount for influxdb configuration
+      - influxdb_config:/etc/influxdb/
+    networks:
+      - main
+  zookeeper:
+#    image: zookeeper:${ZOOKEEPER_VERSION}
+    image: 'bitnami/zookeeper:${ZOOKEEPER_VERSION}'
+    networks:
+      - main
+    volumes:
+      - "zookeeper_data:/bitnami/zookeeper"
+    ports:
+      - "${ZOOKEEPER_PORT}:2181"
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+  kafka:
+    image: 'bitnami/kafka:${KAFKA_VERSION}'
+    ports:
+      - "${KAFKA_INTERNAL_CLIENT_PORT}:9092"
+      - "${KAFKA_EXTERNAL_CLIENT_PORT}:9093"
+    volumes:
+      - "kafka_data:/bitnami/kafka"
+    environment:
+      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
+      - ALLOW_PLAINTEXT_LISTENER=yes
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CLIENT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      - KAFKA_CFG_LISTENERS=CLIENT://:9092,EXTERNAL://:9093
+      - KAFKA_CFG_ADVERTISED_LISTENERS=CLIENT://kafka:9092,EXTERNAL://localhost:9093
+      - KAFKA_INTER_BROKER_LISTENER_NAME=CLIENT
+    depends_on:
+      - zookeeper
+    networks:
+      - main
+
+  chronograf:
+    image: chronograf:${CHRONOGRAF_VERSION}
+    volumes:
+      # Mount for chronograf database
+      - chronograf_data:/var/lib/chronograf/
+    ports:
+      # The WebUI for Chronograf is served on port 8888
+      - "${CHRONOGRAF_PORT}:8888"
+    depends_on:
+      - influxdb
+    networks:
+      - main
+
+  kafdrop:
+    image: obsidiandynamics/kafdrop # Kafka gui
+    restart: "no"
+    environment:
+      - KAFKA_BROKERCONNECT=kafka:9092
+      - JVM_OPTS=-Xms16M -Xmx48M -Xss180K -XX:-TieredCompilation -XX:+UseStringDeduplication -noverify
+    ports:
+      - "${KAFDROP_PORT}:9000"
+    depends_on:
+      - kafka
+    networks:
+      - main
